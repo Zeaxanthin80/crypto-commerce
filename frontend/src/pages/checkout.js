@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { FiCreditCard, FiUser, FiMapPin, FiPhone, FiMail, FiCopy, FiCheck } from 'react-icons/fi';
+import { FiCreditCard, FiUser, FiMapPin, FiPhone, FiMail, FiCopy, FiCheck, FiAlertCircle } from 'react-icons/fi';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import dynamic from 'next/dynamic';
+
+// Dynamically import web3 utilities with no SSR to avoid window not defined errors
+const Web3Utils = dynamic(() => import('../utils/web3').then(mod => ({
+  connectWallet: mod.connectWallet,
+  processPayment: mod.processPayment,
+  switchToCorrectNetwork: mod.switchToCorrectNetwork,
+  getTokenBalance: mod.getTokenBalance
+})), { ssr: false });
 
 export default function Checkout() {
   const router = useRouter();
@@ -12,6 +21,13 @@ export default function Checkout() {
   const [orderStep, setOrderStep] = useState('details'); // 'details', 'payment', 'confirmation'
   const [paymentStatus, setPaymentStatus] = useState('pending'); // 'pending', 'processing', 'completed', 'failed'
   const [copied, setCopied] = useState(false);
+  
+  // Web3 state
+  const [walletConnected, setWalletConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState('');
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [networkCorrect, setNetworkCorrect] = useState(false);
+  const [web3Error, setWeb3Error] = useState('');
   
   // Form state
   const [formData, setFormData] = useState({
@@ -26,11 +42,75 @@ export default function Checkout() {
     country: 'United States'
   });
 
-  // Mock payment data
-  const platformWalletAddress = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e';
-  const paymentAmount = (subtotal - discount).toFixed(2);
-  const paymentReference = `ORDER-${Math.floor(Math.random() * 1000000)}`;
+  // Connect to MetaMask wallet
+  const handleConnectWallet = async () => {
+    try {
+      setWeb3Error('');
+      
+      // First ensure we're on the correct network
+      await Web3Utils.switchToCorrectNetwork();
+      setNetworkCorrect(true);
+      
+      // Connect to wallet
+      const walletData = await Web3Utils.connectWallet();
+      setWalletConnected(true);
+      setWalletAddress(walletData.address);
+      
+      // Get token balance
+      const balance = await Web3Utils.getTokenBalance(walletData.address, walletData.signer);
+      setWalletBalance(balance);
+      
+      return walletData;
+    } catch (error) {
+      console.error("Wallet connection error:", error);
+      setWeb3Error(error.message || "Failed to connect wallet");
+      return null;
+    }
+  };
 
+  // Process crypto payment
+  const handleCryptoPayment = async () => {
+    try {
+      setPaymentStatus('processing');
+      setWeb3Error('');
+      
+      // Connect wallet if not already connected
+      let walletData = walletConnected ? { address: walletAddress } : await handleConnectWallet();
+      
+      if (!walletData) {
+        throw new Error("Wallet connection required");
+      }
+      
+      // Ensure correct network
+      if (!networkCorrect) {
+        await Web3Utils.switchToCorrectNetwork();
+        setNetworkCorrect(true);
+      }
+      
+      // Reconnect to get fresh signer
+      walletData = await Web3Utils.connectWallet();
+      
+      // Process the payment
+      const paymentResult = await Web3Utils.processPayment(subtotal.toFixed(2), walletData.signer);
+      
+      if (paymentResult.success) {
+        setPaymentStatus('completed');
+        setOrderStep('confirmation');
+        
+        // In a real app, you would send the order to your backend here
+        // and clear the cart
+        localStorage.removeItem('cart');
+      } else {
+        setPaymentStatus('failed');
+        setWeb3Error(paymentResult.message || "Payment failed");
+      }
+    } catch (error) {
+      console.error("Payment error:", error);
+      setPaymentStatus('failed');
+      setWeb3Error(error.message || "Payment processing failed");
+    }
+  };
+  
   useEffect(() => {
     // Check if user is logged in
     const user = localStorage.getItem('user');
@@ -101,35 +181,82 @@ export default function Checkout() {
     });
   };
 
-  const handlePaymentConfirmation = () => {
-    // In a real app, this would verify the payment on the blockchain
-    setPaymentStatus('processing');
-    
-    // Simulate payment verification
-    setTimeout(() => {
-      setPaymentStatus('completed');
-      setOrderStep('confirmation');
-      
-      // Clear cart on successful payment
-      localStorage.setItem('cart', JSON.stringify([]));
-      
-      // Store order in order history
-      const orderHistory = localStorage.getItem('orderHistory') 
-        ? JSON.parse(localStorage.getItem('orderHistory')) 
-        : [];
+  // Render payment method section
+  const renderPaymentMethod = () => {
+    return (
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Payment Method</h2>
         
-      const newOrder = {
-        id: paymentReference,
-        date: new Date().toISOString(),
-        items: cartItems,
-        total: paymentAmount,
-        status: 'paid',
-        shippingDetails: formData
-      };
-      
-      orderHistory.push(newOrder);
-      localStorage.setItem('orderHistory', JSON.stringify(orderHistory));
-    }, 3000);
+        <div className="mb-6">
+          <div className="flex items-center mb-3">
+            <input 
+              type="radio" 
+              id="crypto" 
+              name="paymentMethod" 
+              className="mr-2" 
+              checked={true}
+              readOnly
+            />
+            <label htmlFor="crypto" className="flex items-center">
+              <span className="mr-2">Pay with USDT</span>
+              <img src="https://cryptologos.cc/logos/tether-usdt-logo.png" alt="USDT" className="h-6 w-6" />
+            </label>
+          </div>
+          
+          <div className="ml-6 p-4 bg-gray-50 rounded-md">
+            {!walletConnected ? (
+              <button 
+                onClick={handleConnectWallet}
+                className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+              >
+                Connect MetaMask
+              </button>
+            ) : (
+              <div>
+                <div className="flex items-center mb-2">
+                  <span className="font-medium mr-2">Wallet:</span>
+                  <span className="text-sm text-gray-600 truncate">{walletAddress}</span>
+                </div>
+                
+                {walletBalance && (
+                  <div className="mb-2">
+                    <span className="font-medium mr-2">Balance:</span>
+                    <span className={`${parseFloat(walletBalance.balance) < subtotal ? 'text-red-600' : 'text-green-600'}`}>
+                      {walletBalance.balance} {walletBalance.symbol}
+                    </span>
+                  </div>
+                )}
+                
+                {web3Error && (
+                  <div className="text-red-600 flex items-center mb-2">
+                    <FiAlertCircle className="mr-1" />
+                    <span>{web3Error}</span>
+                  </div>
+                )}
+                
+                <button 
+                  onClick={handleCryptoPayment}
+                  disabled={paymentStatus === 'processing' || (walletBalance && parseFloat(walletBalance.balance) < subtotal)}
+                  className={`${
+                    paymentStatus === 'processing' 
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : (walletBalance && parseFloat(walletBalance.balance) < subtotal)
+                        ? 'bg-red-400 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700'
+                  } text-white py-2 px-4 rounded transition-colors w-full mt-2`}
+                >
+                  {paymentStatus === 'processing' 
+                    ? 'Processing...' 
+                    : (walletBalance && parseFloat(walletBalance.balance) < subtotal)
+                      ? 'Insufficient Balance'
+                      : 'Pay Now'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -342,81 +469,7 @@ export default function Checkout() {
                   <>
                     <h2 className="text-xl font-semibold mb-4">Payment with USDT</h2>
                     
-                    <div className="mb-6">
-                      <div className="p-6 bg-gray-50 rounded-lg border border-gray-200">
-                        <h3 className="font-medium mb-4">Instructions:</h3>
-                        <ol className="list-decimal list-inside space-y-2 text-gray-700">
-                          <li>Send exactly <span className="font-semibold">{paymentAmount} USDT</span> to the platform wallet address below.</li>
-                          <li>Include the payment reference in the transaction memo.</li>
-                          <li>After sending the payment, click on "I've completed payment" button below.</li>
-                          <li>Wait for payment confirmation (this may take 1-2 minutes).</li>
-                        </ol>
-                      </div>
-                    </div>
-                    
-                    <div className="mb-6">
-                      <label className="block mb-2 font-medium text-gray-700">Platform Wallet Address</label>
-                      <div className="flex">
-                        <input
-                          type="text"
-                          value={platformWalletAddress}
-                          className="flex-grow py-3 px-4 bg-gray-100 border border-gray-300 rounded-l-md focus:outline-none"
-                          readOnly
-                        />
-                        <button
-                          onClick={() => copyToClipboard(platformWalletAddress)}
-                          className="bg-gray-200 px-4 rounded-r-md hover:bg-gray-300 transition duration-200 flex items-center"
-                        >
-                          {copied ? <FiCheck className="text-green-600" /> : <FiCopy />}
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="mb-6">
-                      <label className="block mb-2 font-medium text-gray-700">Payment Reference</label>
-                      <div className="flex">
-                        <input
-                          type="text"
-                          value={paymentReference}
-                          className="flex-grow py-3 px-4 bg-gray-100 border border-gray-300 rounded-l-md focus:outline-none"
-                          readOnly
-                        />
-                        <button
-                          onClick={() => copyToClipboard(paymentReference)}
-                          className="bg-gray-200 px-4 rounded-r-md hover:bg-gray-300 transition duration-200 flex items-center"
-                        >
-                          {copied ? <FiCheck className="text-green-600" /> : <FiCopy />}
-                        </button>
-                      </div>
-                      <p className="mt-1 text-sm text-gray-500">Important: Include this reference in your transaction</p>
-                    </div>
-                    
-                    <div className="mb-6">
-                      <label className="block mb-2 font-medium text-gray-700">Amount to Send</label>
-                      <div className="py-3 px-4 bg-gray-100 border border-gray-300 rounded-md font-semibold">
-                        {paymentAmount} USDT
-                      </div>
-                    </div>
-                    
-                    <button
-                      onClick={handlePaymentConfirmation}
-                      className={`w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-md hover:bg-blue-700 transition duration-200 ${
-                        paymentStatus === 'processing' ? 'opacity-70 cursor-not-allowed' : ''
-                      }`}
-                      disabled={paymentStatus === 'processing'}
-                    >
-                      {paymentStatus === 'processing' ? (
-                        <span className="flex items-center justify-center">
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Verifying Payment...
-                        </span>
-                      ) : (
-                        "I've Completed Payment"
-                      )}
-                    </button>
+                    {renderPaymentMethod()}
                     
                     <div className="mt-4">
                       <button
@@ -443,11 +496,11 @@ export default function Checkout() {
                     <div className="bg-gray-50 rounded-lg p-6 mb-6 text-left">
                       <div className="flex justify-between mb-2">
                         <span className="font-medium">Order Number:</span>
-                        <span>{paymentReference}</span>
+                        <span>{Math.floor(Math.random() * 1000000)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="font-medium">Amount Paid:</span>
-                        <span>${paymentAmount} USDT</span>
+                        <span>${subtotal.toFixed(2)} USDT</span>
                       </div>
                     </div>
                     
@@ -509,7 +562,7 @@ export default function Checkout() {
                     </div>
                   )}
                   
-                  <div className="border-t border-gray-200 pt-2 flex justify-between">
+                  <div className="border-t border-gray-300 pt-2 flex justify-between">
                     <span className="font-semibold">Total</span>
                     <span className="font-bold">${(subtotal - discount).toFixed(2)}</span>
                   </div>

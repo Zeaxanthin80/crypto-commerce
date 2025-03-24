@@ -50,6 +50,7 @@ app.use('/api/orders', require('./routes/order.routes'));
 app.use('/api/cart', require('./routes/cart.routes'));
 app.use('/api/payments', require('./routes/payment.routes'));
 app.use('/api/categories', require('./routes/category.routes'));
+app.use('/api/admin', require('./routes/admin.routes'));
 
 // Health check endpoint
 app.get('/health', (req, res) => {

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Commerce Project Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .screenshot {
+            max-width: 100%;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <header class="bg-blue-600 text-white shadow-md">
+        <div class="container mx-auto px-4 py-4">
+            <h1 class="text-3xl font-bold">Crypto Commerce Platform</h1>
+            <p class="mt-2">Static Demonstration of UI Components</p>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-4">Project Overview</h2>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <p class="mb-4">This cryptocurrency e-commerce platform allows users to browse products, add them to cart, and make purchases using USDT cryptocurrency.</p>
+                <p class="mb-4">The project is built with React.js and Next.js for the frontend, using Tailwind CSS for styling. It includes user authentication, product management, shopping cart functionality, and cryptocurrency payment processing.</p>
+                <p>Below you'll find demonstrations of the key pages that have been implemented.</p>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-4">Products Listing Page</h2>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="mb-4">
+                    <h3 class="text-xl font-semibold mb-2">Features:</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Grid and list view options</li>
+                        <li>Category filtering</li>
+                        <li>Price range filtering</li>
+                        <li>Sorting by price, rating, etc.</li>
+                        <li>Responsive design</li>
+                    </ul>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-xl font-semibold mb-4">Preview:</h3>
+                    <img src="https://via.placeholder.com/800x600?text=Products+Page+Screenshot" alt="Products Page" class="screenshot">
+                    <div class="mt-4 bg-gray-100 p-4 rounded-md">
+                        <p class="text-gray-700">File path: <code class="bg-gray-200 px-2 py-1 rounded">frontend/src/pages/products.js</code></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-4">Product Detail Page</h2>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="mb-4">
+                    <h3 class="text-xl font-semibold mb-2">Features:</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Product image gallery</li>
+                        <li>Product description, specifications, and reviews</li>
+                        <li>Add to cart functionality</li>
+                        <li>Quantity selection</li>
+                        <li>Related products</li>
+                    </ul>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-xl font-semibold mb-4">Preview:</h3>
+                    <img src="https://via.placeholder.com/800x600?text=Product+Detail+Page+Screenshot" alt="Product Detail Page" class="screenshot">
+                    <div class="mt-4 bg-gray-100 p-4 rounded-md">
+                        <p class="text-gray-700">File path: <code class="bg-gray-200 px-2 py-1 rounded">frontend/src/pages/product/[id].js</code></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-4">Shopping Cart Page</h2>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="mb-4">
+                    <h3 class="text-xl font-semibold mb-2">Features:</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Product listing with quantities</li>
+                        <li>Price calculations with subtotal</li>
+                        <li>Quantity adjustment</li>
+                        <li>Remove item functionality</li>
+                        <li>Proceed to checkout button</li>
+                    </ul>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-xl font-semibold mb-4">Preview:</h3>
+                    <img src="https://via.placeholder.com/800x600?text=Cart+Page+Screenshot" alt="Cart Page" class="screenshot">
+                    <div class="mt-4 bg-gray-100 p-4 rounded-md">
+                        <p class="text-gray-700">File path: <code class="bg-gray-200 px-2 py-1 rounded">frontend/src/pages/cart.js</code></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-4">Checkout Page</h2>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="mb-4">
+                    <h3 class="text-xl font-semibold mb-2">Features:</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Shipping information form</li>
+                        <li>Order summary</li>
+                        <li>USDT payment integration</li>
+                        <li>Order confirmation</li>
+                    </ul>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-xl font-semibold mb-4">Preview:</h3>
+                    <img src="https://via.placeholder.com/800x600?text=Checkout+Page+Screenshot" alt="Checkout Page" class="screenshot">
+                    <div class="mt-4 bg-gray-100 p-4 rounded-md">
+                        <p class="text-gray-700">File path: <code class="bg-gray-200 px-2 py-1 rounded">frontend/src/pages/checkout.js</code></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-4">Authentication Pages</h2>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="mb-4">
+                    <h3 class="text-xl font-semibold mb-2">Includes:</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700">
+                        <li>Login Page</li>
+                        <li>Registration Page</li>
+                        <li>Vendor Registration Page</li>
+                    </ul>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-xl font-semibold mb-4">Preview:</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <img src="https://via.placeholder.com/400x300?text=Login+Page" alt="Login Page" class="screenshot">
+                            <p class="mt-2 text-center text-gray-700">Login Page</p>
+                        </div>
+                        <div>
+                            <img src="https://via.placeholder.com/400x300?text=Registration+Page" alt="Registration Page" class="screenshot">
+                            <p class="mt-2 text-center text-gray-700">Registration Page</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-gray-100 p-4 rounded-md">
+                        <p class="text-gray-700">File paths:</p>
+                        <ul class="list-disc list-inside text-gray-700 mt-2">
+                            <li><code class="bg-gray-200 px-2 py-1 rounded">frontend/src/pages/auth/login.js</code></li>
+                            <li><code class="bg-gray-200 px-2 py-1 rounded">frontend/src/pages/auth/register.js</code></li>
+                            <li><code class="bg-gray-200 px-2 py-1 rounded">frontend/src/pages/auth/vendor-register.js</code></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-4">Next Steps</h2>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-xl font-semibold mb-2">To properly set up and run the project:</h3>
+                <ol class="list-decimal list-inside space-y-2 text-gray-700">
+                    <li>Resolve the PowerShell execution policy issue by opening PowerShell as Administrator and running:
+                        <pre class="bg-gray-100 p-3 rounded-md mt-2 overflow-x-auto">Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned</pre>
+                    </li>
+                    <li>Install Node.js dependencies from the command line:
+                        <pre class="bg-gray-100 p-3 rounded-md mt-2 overflow-x-auto">cd C:\Users\Jose\CascadeProjects\crypto-commerce\frontend
+npm install</pre>
+                    </li>
+                    <li>Start the development server:
+                        <pre class="bg-gray-100 p-3 rounded-md mt-2 overflow-x-auto">npm run dev</pre>
+                    </li>
+                    <li>Open your browser and navigate to <code class="bg-gray-200 px-2 py-1 rounded">http://localhost:3000</code></li>
+                </ol>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-gray-800 text-white py-8">
+        <div class="container mx-auto px-4">
+            <div class="text-center">
+                <p>Crypto Commerce Platform - Demo Project</p>
+                <p class="mt-2 text-gray-400">© 2025 All rights reserved</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

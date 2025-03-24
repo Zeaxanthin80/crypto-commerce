@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/product/(?<id>[^/]+)$",
+      "dest": "/product/[id]?id=$id"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_API_URL": "https://your-backend-api.com",
+    "NEXT_PUBLIC_ETHEREUM_PROVIDER_URL": "https://mainnet.infura.io/v3/your-infura-project-id",
+    "NEXT_PUBLIC_PLATFORM_WALLET_ADDRESS": "0xYourPlatformWalletAddress"
+  }
+}

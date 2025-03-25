@@ -1,5 +1,6 @@
-// const { Vendor, User, Product } = require('../models');
-const Vendor = require('../models');
+const Vendor = require('../models/vendor.model');
+const User = require('../models/user.model');
+const Product = require('../models/product.model');
 const { Op } = require('sequelize');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');

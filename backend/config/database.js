@@ -4,7 +4,6 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const config = {
-  host: process.env.DB_HOST || 'localhost',
   dialect: 'postgres',
   logging: process.env.NODE_ENV === 'development' ? console.log : false,
   pool: {
@@ -12,45 +11,37 @@ const config = {
     min: 0,
     acquire: 60000,
     idle: 10000
-  },
-  retry: {
-    match: [
-      /SequelizeConnectionError/,
-      /SequelizeConnectionRefusedError/,
-      /SequelizeHostNotFoundError/,
-      /SequelizeHostNotReachableError/,
-      /SequelizeInvalidConnectionError/,
-      /SequelizeConnectionTimedOutError/,
-      /TimeoutError/,
-      /SequelizeConnectionAcquireTimeoutError/
-    ],
-    max: 3
   }
 };
 
-// Add SSL configuration for production
-if (process.env.NODE_ENV === 'production') {
+// For Railway deployment
+if (process.env.RAILWAY_ENVIRONMENT === 'production') {
   config.dialectOptions = {
     ssl: {
       require: true,
-      rejectUnauthorized: false // Required for Railway's self-signed certificates
+      rejectUnauthorized: false
     }
   };
 }
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME || 'crypto_commerce',
-  process.env.DB_USER || 'postgres',
-  process.env.DB_PASSWORD || 'postgres',
-  config
-);
+// Construct DATABASE_URL from Railway variables if they exist
+const databaseUrl = process.env.RAILWAY_ENVIRONMENT === 'production'
+  ? `postgresql://${process.env.PGUSER}:${process.env.POSTGRES_PASSWORD}@${process.env.RAILWAY_PRIVATE_DOMAIN}:5432/${process.env.PGDATABASE}`
+  : process.env.DATABASE_URL;
 
-// Test the connection and handle errors
-sequelize
-  .authenticate()
-  .catch(err => {
-    console.error('Unable to connect to the database:', err);
-    // Don't exit here, let the application handle the error
-  });
+const sequelize = databaseUrl
+  ? new Sequelize(databaseUrl, config)
+  : new Sequelize(
+      process.env.DB_NAME || 'crypto_commerce',
+      process.env.DB_USER || 'postgres',
+      process.env.DB_PASSWORD || 'postgres',
+      {
+        ...config,
+        host: process.env.DB_HOST || 'localhost',
+        dialectOptions: {
+          ssl: false
+        }
+      }
+    );
 
 module.exports = sequelize;

@@ -28,10 +28,46 @@ const USDT_ABI = [
   }
 ];
 
-// Ethereum network provider
+// Ethereum network provider with retries and error handling
 const getWeb3 = () => {
-  const providerUrl = process.env.ETHEREUM_PROVIDER_URL || 'https://mainnet.infura.io/v3/your-infura-key';
-  return new Web3(new Web3.providers.HttpProvider(providerUrl));
+  const maxRetries = 3;
+  const retryDelay = 1000; // 1 second
+
+  const provider = new Web3.providers.HttpProvider(
+    process.env.ETHEREUM_PROVIDER_URL || 'https://mainnet.infura.io/v3/your-infura-key',
+    {
+      timeout: 30000, // 30 seconds
+      reconnect: {
+        auto: true,
+        delay: retryDelay,
+        maxAttempts: maxRetries,
+        onTimeout: true
+      }
+    }
+  );
+
+  const web3 = new Web3(provider);
+  
+  // Add custom retry logic for API calls
+  const originalSend = provider.send;
+  provider.send = async function (payload, callback) {
+    let attempts = 0;
+    
+    const tryRequest = async () => {
+      try {
+        attempts++;
+        return await originalSend.call(this, payload, callback);
+      } catch (error) {
+        if (attempts >= maxRetries) throw error;
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        return tryRequest();
+      }
+    };
+    
+    return tryRequest();
+  };
+
+  return web3;
 };
 
 // Create a new crypto payment
@@ -39,45 +75,71 @@ exports.createCryptoPayment = async (req, res) => {
   try {
     const { orderId, walletAddressFrom } = req.body;
     
-    // Find order
+    if (!orderId || !walletAddressFrom) {
+      return res.status(400).json({ 
+        message: 'Missing required fields: orderId and walletAddressFrom' 
+      });
+    }
+
+    // Validate wallet address format
+    if (!Web3.utils.isAddress(walletAddressFrom)) {
+      return res.status(400).json({ 
+        message: 'Invalid wallet address format' 
+      });
+    }
+    
+    // Find order with transaction safety
     const order = await Order.findByPk(orderId);
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
+
+    if (order.payment_status === 'completed') {
+      return res.status(400).json({ message: 'Order is already paid' });
+    }
     
-    // Generate wallet address for payment (in a real app, this would use a secure wallet service)
-    const walletAddressTo = process.env.PLATFORM_WALLET_ADDRESS || '0x123456789abcdef123456789abcdef123456789';
-    
-    // Create pending crypto payment
-    const payment = await CryptoPayment.create({
-      order_id: orderId,
-      wallet_address_from: walletAddressFrom,
-      wallet_address_to: walletAddressTo,
-      amount: order.total_amount,
-      currency: 'USDT',
-      status: 'pending',
-      confirmation_count: 0
+    const walletAddressTo = process.env.PLATFORM_WALLET_ADDRESS;
+    if (!walletAddressTo || !Web3.utils.isAddress(walletAddressTo)) {
+      throw new Error('Invalid platform wallet configuration');
+    }
+
+    // Create payment in a transaction
+    const result = await sequelize.transaction(async (t) => {
+      const payment = await CryptoPayment.create({
+        order_id: orderId,
+        wallet_address_from: walletAddressFrom,
+        wallet_address_to: walletAddressTo,
+        amount: order.total_amount,
+        currency: 'USDT',
+        status: 'pending',
+        confirmation_count: 0
+      }, { transaction: t });
+
+      await order.update({
+        payment_status: 'pending',
+        payment_transaction_id: `${payment.id}`
+      }, { transaction: t });
+
+      return payment;
     });
-    
-    // Update order payment status
-    await order.update({
-      payment_status: 'pending',
-      payment_transaction_id: `${payment.id}`
-    });
-    
+
     res.status(201).json({
       message: 'Crypto payment initialized',
       payment: {
-        id: payment.id,
-        amount: payment.amount,
-        currency: payment.currency,
-        walletAddressTo: payment.wallet_address_to,
-        status: payment.status
+        id: result.id,
+        amount: result.amount,
+        currency: result.currency,
+        walletAddressTo: result.wallet_address_to,
+        status: result.status
       }
     });
   } catch (error) {
     console.error('Error initializing crypto payment:', error);
-    res.status(500).json({ message: 'Failed to initialize payment', error: error.message });
+    res.status(error.name === 'SequelizeValidationError' ? 400 : 500)
+      .json({ 
+        message: 'Failed to initialize payment', 
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error' 
+      });
   }
 };
 
@@ -194,59 +256,62 @@ exports.verifyPayment = async (req, res) => {
   }
 };
 
-// Background function to monitor transaction (simplified for this example)
+// Background function to monitor transaction with enhanced error handling
 async function monitorTransaction(paymentId, transactionHash) {
-  try {
-    // In a production app, this would be implemented with a proper job queue system
-    // For demonstration purposes, we're just simulating the process
-    
-    // Fetch payment
-    const payment = await CryptoPayment.findByPk(paymentId);
-    if (!payment) return;
-    
-    // Connect to Ethereum node
-    const web3 = getWeb3();
-    
-    // Check transaction receipt
-    const receipt = await web3.eth.getTransactionReceipt(transactionHash);
-    if (!receipt) {
-      // Transaction not yet mined, would retry in production
-      console.log(`Transaction ${transactionHash} not yet mined. Would retry in production.`);
-      return;
-    }
-    
-    if (receipt.status) {
-      // Transaction successful
-      // Update payment status
-      await payment.update({
-        status: 'confirmed',
-        confirmation_count: 12, // Simplified for example
-        block_number: receipt.blockNumber
+  let attempts = 0;
+  const maxAttempts = 3;
+  const retryDelay = 5000; // 5 seconds
+
+  const processTransaction = async () => {
+    try {
+      const payment = await CryptoPayment.findByPk(paymentId);
+      if (!payment) return;
+
+      const web3 = getWeb3();
+      const receipt = await web3.eth.getTransactionReceipt(transactionHash);
+
+      if (!receipt) {
+        if (attempts < maxAttempts) {
+          attempts++;
+          setTimeout(() => processTransaction(), retryDelay);
+          return;
+        }
+        throw new Error('Transaction not found after maximum attempts');
+      }
+
+      await sequelize.transaction(async (t) => {
+        if (receipt.status) {
+          await payment.update({
+            status: 'confirmed',
+            confirmation_count: 12,
+            block_number: receipt.blockNumber
+          }, { transaction: t });
+
+          const order = await Order.findByPk(payment.order_id);
+          if (order) {
+            await order.update({
+              payment_status: 'completed',
+              order_status: 'processing'
+            }, { transaction: t });
+          }
+        } else {
+          await payment.update({ status: 'failed' }, { transaction: t });
+          
+          const order = await Order.findByPk(payment.order_id);
+          if (order) {
+            await order.update({ payment_status: 'failed' }, { transaction: t });
+          }
+        }
       });
-      
-      // Update order
-      const order = await Order.findByPk(payment.order_id);
-      if (order) {
-        await order.update({
-          payment_status: 'completed',
-          order_status: 'processing'
-        });
+
+    } catch (error) {
+      console.error(`Error monitoring transaction ${transactionHash}:`, error);
+      // In production, you would want to send this to an error monitoring service
+      if (process.env.NODE_ENV === 'production') {
+        // TODO: Implement error reporting service
       }
-      
-      console.log(`Payment ${paymentId} confirmed with transaction ${transactionHash}`);
-    } else {
-      // Transaction failed
-      await payment.update({ status: 'failed' });
-      
-      // Update order
-      const order = await Order.findByPk(payment.order_id);
-      if (order) {
-        await order.update({ payment_status: 'failed' });
-      }
-      
-      console.log(`Payment ${paymentId} failed with transaction ${transactionHash}`);
     }
-  } catch (error) {
-    console.error(`Error monitoring transaction ${transactionHash}:`, error);
-  }
+  };
+
+  await processTransaction();
 }

@@ -1,15 +1,20 @@
 const Product = require('../models/product.model');
 const User = require('../models/user.model');
+const redis = require('../services/redis');
 const { Op } = require('sequelize');
 
-// Redis could be used here for better performance in a production environment
-const carts = new Map();
+// Helper function to get cart key for a user
+const getCartKey = (userId) => `cart:${userId}`;
 
 // Get user's cart
 exports.getCart = async (req, res) => {
     try {
         const userId = req.user.id;
-        const cart = carts.get(userId) || { items: [], total: 0 };
+        const cartKey = getCartKey(userId);
+        
+        // Get cart from Redis
+        const cartData = await redis.get(cartKey);
+        const cart = cartData ? JSON.parse(cartData) : { items: [], total: 0 };
         
         // Refresh product details and availability
         for (let item of cart.items) {
@@ -23,7 +28,9 @@ exports.getCart = async (req, res) => {
         
         // Recalculate total
         cart.total = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        carts.set(userId, cart);
+        
+        // Update cart in Redis
+        await redis.set(cartKey, JSON.stringify(cart));
         
         res.status(200).json(cart);
     } catch (error) {
@@ -37,6 +44,7 @@ exports.addItem = async (req, res) => {
     try {
         const userId = req.user.id;
         const { productId, quantity = 1 } = req.body;
+        const cartKey = getCartKey(userId);
         
         // Validate product
         const product = await Product.findByPk(productId);
@@ -49,7 +57,8 @@ exports.addItem = async (req, res) => {
         }
         
         // Get or initialize cart
-        const cart = carts.get(userId) || { items: [], total: 0 };
+        const cartData = await redis.get(cartKey);
+        const cart = cartData ? JSON.parse(cartData) : { items: [], total: 0 };
         
         // Check if product already in cart
         const existingItem = cart.items.find(item => item.productId === productId);
@@ -68,9 +77,9 @@ exports.addItem = async (req, res) => {
             });
         }
         
-        // Update total
+        // Update total and save to Redis
         cart.total = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        carts.set(userId, cart);
+        await redis.set(cartKey, JSON.stringify(cart));
         
         res.status(200).json(cart);
     } catch (error) {
@@ -85,12 +94,15 @@ exports.updateItem = async (req, res) => {
         const userId = req.user.id;
         const { itemId } = req.params;
         const { quantity } = req.body;
+        const cartKey = getCartKey(userId);
         
-        const cart = carts.get(userId);
-        if (!cart) {
+        // Get cart from Redis
+        const cartData = await redis.get(cartKey);
+        if (!cartData) {
             return res.status(404).json({ message: 'Cart not found' });
         }
         
+        const cart = JSON.parse(cartData);
         const item = cart.items.find(item => item.productId === parseInt(itemId));
         if (!item) {
             return res.status(404).json({ message: 'Item not found in cart' });
@@ -105,6 +117,9 @@ exports.updateItem = async (req, res) => {
         item.quantity = quantity;
         cart.total = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         
+        // Save updated cart to Redis
+        await redis.set(cartKey, JSON.stringify(cart));
+        
         res.status(200).json(cart);
     } catch (error) {
         console.error('Error updating cart item:', error);
@@ -117,14 +132,20 @@ exports.removeItem = async (req, res) => {
     try {
         const userId = req.user.id;
         const { itemId } = req.params;
+        const cartKey = getCartKey(userId);
         
-        const cart = carts.get(userId);
-        if (!cart) {
+        // Get cart from Redis
+        const cartData = await redis.get(cartKey);
+        if (!cartData) {
             return res.status(404).json({ message: 'Cart not found' });
         }
         
+        const cart = JSON.parse(cartData);
         cart.items = cart.items.filter(item => item.productId !== parseInt(itemId));
         cart.total = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        
+        // Save updated cart to Redis
+        await redis.set(cartKey, JSON.stringify(cart));
         
         res.status(200).json(cart);
     } catch (error) {
@@ -137,7 +158,11 @@ exports.removeItem = async (req, res) => {
 exports.clearCart = async (req, res) => {
     try {
         const userId = req.user.id;
-        carts.set(userId, { items: [], total: 0 });
+        const cartKey = getCartKey(userId);
+        
+        // Delete cart from Redis
+        await redis.del(cartKey);
+        
         res.status(200).json({ message: 'Cart cleared successfully' });
     } catch (error) {
         console.error('Error clearing cart:', error);
@@ -150,11 +175,15 @@ exports.applyCoupon = async (req, res) => {
     try {
         const userId = req.user.id;
         const { code } = req.body;
+        const cartKey = getCartKey(userId);
         
-        const cart = carts.get(userId);
-        if (!cart) {
+        // Get cart from Redis
+        const cartData = await redis.get(cartKey);
+        if (!cartData) {
             return res.status(404).json({ message: 'Cart not found' });
         }
+        
+        const cart = JSON.parse(cartData);
         
         // In a real implementation, we would validate the coupon code against a database
         // For now, we'll just implement a simple discount for the demo coupon
@@ -162,6 +191,9 @@ exports.applyCoupon = async (req, res) => {
             const discount = cart.total * 0.1;
             cart.discount = discount;
             cart.finalTotal = cart.total - discount;
+            
+            // Save updated cart to Redis
+            await redis.set(cartKey, JSON.stringify(cart));
         } else {
             return res.status(400).json({ message: 'Invalid coupon code' });
         }
@@ -202,7 +234,10 @@ exports.syncCart = async (req, res) => {
         }
         
         const cart = { items: validatedItems, total };
-        carts.set(userId, cart);
+        const cartKey = getCartKey(userId);
+        
+        // Save cart to Redis
+        await redis.set(cartKey, JSON.stringify(cart));
         
         res.status(200).json(cart);
     } catch (error) {

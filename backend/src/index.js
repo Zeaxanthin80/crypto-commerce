@@ -2,9 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const { Sequelize } = require('sequelize');
 const dotenv = require('dotenv');
 const path = require('path');
+const sequelize = require('../config/database');
 
 // Load environment variables
 dotenv.config();
@@ -12,24 +12,6 @@ dotenv.config();
 // Initialize express app
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-// Setup database connection
-const sequelize = new Sequelize(
-  process.env.DB_NAME || 'crypto_commerce',
-  process.env.DB_USER || 'postgres',
-  process.env.DB_PASSWORD || 'postgres',
-  {
-    host: process.env.DB_HOST || 'localhost',
-    dialect: 'postgres',
-    logging: false,
-    pool: {
-      max: 5,
-      min: 0,
-      acquire: 30000,
-      idle: 10000
-    }
-  }
-);
 
 // Middleware
 app.use(cors());
@@ -88,6 +70,7 @@ const startServer = async () => {
     });
   } catch (error) {
     console.error('Failed to start server:', error);
+    process.exit(1); // Exit on database connection failure
   }
 };
 

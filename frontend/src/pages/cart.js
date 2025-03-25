@@ -14,120 +14,211 @@ export default function Cart() {
   const router = useRouter();
 
   useEffect(() => {
-    // In a real app, cart data might come from local storage or an API
     const fetchCartItems = async () => {
       try {
-        // Mock data from local storage
-        const storedCart = localStorage.getItem('cart') 
-          ? JSON.parse(localStorage.getItem('cart')) 
-          : [];
-        
-        if (storedCart.length === 0) {
-          // If no items in cart, add some mock products for demonstration
-          const mockCart = [
-            {
-              id: 1,
-              name: 'Wireless Bluetooth Headphones',
-              price: 79.99,
-              quantity: 1,
-              image: 'https://via.placeholder.com/150',
-              vendor: 'AudioTech',
-              stock: 15
-            },
-            {
-              id: 2,
-              name: 'Smart Watch Series 5',
-              price: 199.99,
-              quantity: 2,
-              image: 'https://via.placeholder.com/150',
-              vendor: 'TechGadgets',
-              stock: 8
-            }
-          ];
-          
-          setCartItems(mockCart);
-          localStorage.setItem('cart', JSON.stringify(mockCart));
-        } else {
+        setIsLoading(true);
+        const token = localStorage.getItem('token');
+        if (!token) {
+          // For guest users, use localStorage cart
+          const storedCart = localStorage.getItem('cart') 
+            ? JSON.parse(localStorage.getItem('cart')) 
+            : [];
           setCartItems(storedCart);
+          calculateSubtotal(storedCart);
+          setIsLoading(false);
+          return;
         }
-        
-        setIsLoading(false);
+
+        // Fetch cart from API for logged-in users
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cart`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch cart');
+        }
+
+        const data = await response.json();
+        setCartItems(data.items);
+        setSubtotal(data.total);
+        if (data.discount) {
+          setDiscount(data.discount);
+        }
       } catch (error) {
         console.error('Failed to fetch cart items:', error);
+      } finally {
         setIsLoading(false);
       }
     };
-    
+
     fetchCartItems();
   }, []);
 
-  useEffect(() => {
-    // Calculate subtotal whenever cart items change
-    const calculateSubtotal = () => {
-      const total = cartItems.reduce((acc, item) => {
-        return acc + (item.price * item.quantity);
-      }, 0);
-      setSubtotal(total);
-    };
-    
-    calculateSubtotal();
-    
-    // Save to local storage whenever cart changes
-    if (!isLoading) {
-      localStorage.setItem('cart', JSON.stringify(cartItems));
-    }
-  }, [cartItems, isLoading]);
+  const calculateSubtotal = (items) => {
+    const total = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    setSubtotal(total);
+  };
 
-  const handleQuantityChange = (id, change) => {
-    setCartItems(prevItems => 
-      prevItems.map(item => {
-        if (item.id === id) {
-          const newQuantity = Math.max(1, item.quantity + change);
-          // Don't exceed available stock
-          return {
-            ...item,
-            quantity: Math.min(newQuantity, item.stock)
-          };
+  const handleQuantityChange = async (id, change) => {
+    const token = localStorage.getItem('token');
+    const updatedItems = cartItems.map(item => {
+      if (item.productId === id) {
+        const newQuantity = Math.max(1, item.quantity + change);
+        return {
+          ...item,
+          quantity: Math.min(newQuantity, item.stock)
+        };
+      }
+      return item;
+    });
+
+    if (token) {
+      try {
+        const item = updatedItems.find(item => item.productId === id);
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cart/items/${id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ quantity: item.quantity })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update cart');
         }
-        return item;
-      })
-    );
-  };
 
-  const handleRemoveItem = (id) => {
-    setCartItems(prevItems => prevItems.filter(item => item.id !== id));
-  };
-
-  const handleCouponSubmit = (e) => {
-    e.preventDefault();
-    
-    // Mock coupon code validation
-    if (couponCode.toLowerCase() === 'discount10') {
-      const discountAmount = subtotal * 0.1;
-      setDiscount(discountAmount);
-      alert('Coupon applied successfully!');
+        const data = await response.json();
+        setCartItems(data.items);
+        setSubtotal(data.total);
+        if (data.discount) {
+          setDiscount(data.discount);
+        }
+      } catch (error) {
+        console.error('Error updating cart:', error);
+      }
     } else {
-      setDiscount(0);
-      alert('Invalid coupon code.');
+      // Update localStorage for guest users
+      setCartItems(updatedItems);
+      localStorage.setItem('cart', JSON.stringify(updatedItems));
+      calculateSubtotal(updatedItems);
     }
   };
-  
-  const handleCheckout = () => {
-    // Check if user is logged in
-    const user = localStorage.getItem('user');
+
+  const handleRemoveItem = async (id) => {
+    const token = localStorage.getItem('token');
+
+    if (token) {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cart/items/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to remove item');
+        }
+
+        const data = await response.json();
+        setCartItems(data.items);
+        setSubtotal(data.total);
+        if (data.discount) {
+          setDiscount(data.discount);
+        }
+      } catch (error) {
+        console.error('Error removing item:', error);
+      }
+    } else {
+      // Update localStorage for guest users
+      const updatedItems = cartItems.filter(item => item.productId !== id);
+      setCartItems(updatedItems);
+      localStorage.setItem('cart', JSON.stringify(updatedItems));
+      calculateSubtotal(updatedItems);
+    }
+  };
+
+  const handleCouponSubmit = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+
+    if (token) {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cart/apply-coupon`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ code: couponCode })
+        });
+
+        if (!response.ok) {
+          throw new Error('Invalid coupon code');
+        }
+
+        const data = await response.json();
+        setDiscount(data.discount);
+        setSubtotal(data.total);
+      } catch (error) {
+        console.error('Error applying coupon:', error);
+        alert('Invalid coupon code.');
+      }
+    } else {
+      // Mock coupon logic for guest users
+      if (couponCode.toLowerCase() === 'discount10') {
+        const discountAmount = subtotal * 0.1;
+        setDiscount(discountAmount);
+        alert('Coupon applied successfully!');
+      } else {
+        setDiscount(0);
+        alert('Invalid coupon code.');
+      }
+    }
+  };
+
+  const handleCheckout = async () => {
+    const token = localStorage.getItem('token');
     
-    if (!user) {
+    if (!token) {
       // Redirect to login with return URL to checkout
       router.push('/auth/login?returnUrl=/checkout');
       return;
     }
-    
-    // Otherwise proceed to checkout
+
+    // If user has a guest cart, sync it with the backend before checkout
+    const guestCart = localStorage.getItem('cart');
+    if (guestCart) {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cart/sync`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ items: JSON.parse(guestCart) })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to sync cart');
+        }
+
+        // Clear guest cart after successful sync
+        localStorage.removeItem('cart');
+      } catch (error) {
+        console.error('Error syncing cart:', error);
+      }
+    }
+
+    // Proceed to checkout
     router.push('/checkout');
   };
 
   const total = subtotal - discount;
-  
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />

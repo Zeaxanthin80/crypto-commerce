@@ -69,9 +69,8 @@ export default function Checkout() {
   };
 
   // Process crypto payment
-  const handleCryptoPayment = async () => {
+  const handlePayment = async () => {
     try {
-      setPaymentStatus('processing');
       setWeb3Error('');
       
       // Connect wallet if not already connected
@@ -94,12 +93,17 @@ export default function Checkout() {
       const paymentResult = await Web3Utils.processPayment(subtotal.toFixed(2), walletData.signer);
       
       if (paymentResult.success) {
+        // Clear cart on successful payment
+        const token = localStorage.getItem('token');
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cart/clear`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
         setPaymentStatus('completed');
         setOrderStep('confirmation');
-        
-        // In a real app, you would send the order to your backend here
-        // and clear the cart
-        localStorage.removeItem('cart');
       } else {
         setPaymentStatus('failed');
         setWeb3Error(paymentResult.message || "Payment failed");
@@ -120,24 +124,31 @@ export default function Checkout() {
       return;
     }
     
-    // Load cart items from local storage
-    const storedCart = localStorage.getItem('cart') 
-      ? JSON.parse(localStorage.getItem('cart')) 
-      : [];
-      
-    if (storedCart.length === 0) {
-      router.push('/cart');
-      return;
-    }
-    
-    setCartItems(storedCart);
-    
-    // Calculate subtotal
-    const total = storedCart.reduce((acc, item) => {
-      return acc + (item.price * item.quantity);
-    }, 0);
-    setSubtotal(total);
-    
+    const fetchCartItems = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cart`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch cart');
+        }
+
+        const data = await response.json();
+        setCartItems(data.items);
+        setSubtotal(data.total);
+        if (data.discount) {
+          setDiscount(data.discount);
+        }
+      } catch (error) {
+        console.error('Failed to fetch cart items:', error);
+        router.push('/cart');
+      }
+    };
+
     // Load user data if available
     const userData = JSON.parse(user);
     if (userData) {
@@ -145,9 +156,12 @@ export default function Checkout() {
         ...prevData,
         firstName: userData.firstName || '',
         lastName: userData.lastName || '',
-        email: userData.email || ''
+        email: userData.email || '',
+        phone: userData.phone || ''
       }));
     }
+
+    fetchCartItems();
   }, [router]);
 
   const handleInputChange = (e) => {
@@ -235,7 +249,7 @@ export default function Checkout() {
                 )}
                 
                 <button 
-                  onClick={handleCryptoPayment}
+                  onClick={handlePayment}
                   disabled={paymentStatus === 'processing' || (walletBalance && parseFloat(walletBalance.balance) < subtotal)}
                   className={`${
                     paymentStatus === 'processing' 
@@ -485,7 +499,7 @@ export default function Checkout() {
                 {orderStep === 'confirmation' && (
                   <div className="text-center py-8">
                     <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/200/svg">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
                       </svg>
                     </div>

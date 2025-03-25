@@ -125,32 +125,60 @@ export default function ProductDetail() {
   };
   
   // Handle add to cart
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!product) return;
-    
-    const cart = localStorage.getItem('cart') ? JSON.parse(localStorage.getItem('cart')) : [];
-    
-    // Check if product is already in cart
-    const existingProductIndex = cart.findIndex(item => item.id === product.id);
-    
-    if (existingProductIndex >= 0) {
-      // Update quantity
-      cart[existingProductIndex].quantity += quantity;
+
+    const token = localStorage.getItem('token');
+
+    if (token) {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cart/items`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            productId: product.id,
+            quantity
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to add item to cart');
+        }
+
+        alert('Product added to cart!');
+      } catch (error) {
+        console.error('Error adding to cart:', error);
+        alert('Failed to add item to cart. Please try again.');
+      }
     } else {
-      // Add new product
-      cart.push({
-        id: product.id,
-        name: product.name,
-        price: product.discountPrice || product.price,
-        image: product.images[0],
-        vendor: product.vendor,
-        quantity: quantity,
-        stock: product.stock
-      });
+      // Handle guest cart with localStorage
+      const cart = localStorage.getItem('cart') ? JSON.parse(localStorage.getItem('cart')) : [];
+      
+      // Check if product is already in cart
+      const existingProductIndex = cart.findIndex(item => item.productId === product.id);
+      
+      if (existingProductIndex >= 0) {
+        // Update quantity if product exists
+        cart[existingProductIndex].quantity += quantity;
+      } else {
+        // Add new product
+        cart.push({
+          productId: product.id,
+          name: product.name,
+          price: product.discountPrice || product.price,
+          image: product.images[0],
+          vendor: product.vendor,
+          quantity: quantity,
+          stock: product.stock
+        });
+      }
+      
+      localStorage.setItem('cart', JSON.stringify(cart));
+      alert('Product added to cart!');
     }
-    
-    localStorage.setItem('cart', JSON.stringify(cart));
-    alert('Product added to cart!');
   };
   
   // Handle add to wishlist
